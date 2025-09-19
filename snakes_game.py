@@ -1,44 +1,18 @@
 #!/usr/bin/python3
 
+import cgi
+import cgitb
 import random
 import json
 import os
 import tempfile
-from http.server import HTTPServer, CGIHTTPRequestHandler
-import sys
 
-class SnakesLaddersHandler(CGIHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
-        
-        game_state = load_game_state()
-        html = generate_html(game_state)
-        self.wfile.write(html.encode())
-    
-    def do_POST(self):
-        content_length = int(self.headers['Content-Length'])
-        post_data = self.rfile.read(content_length).decode('utf-8')
-        
-        # Parse the POST data
-        action = 'roll' if 'action=roll' in post_data else 'reset' if 'action=reset' in post_data else ''
-        
-        game_state = load_game_state()
-        if action == 'roll':
-            game_state = roll_dice_action(game_state)
-        elif action == 'reset':
-            game_state = reset_game()
-        
-        save_game_state(game_state)
-        
-        # Send response
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
-        
-        html = generate_html(game_state)
-        self.wfile.write(html.encode())
+# Enable CGI error reporting
+cgitb.enable()
+
+# Print Content-Type header (REQUIRED for CGI)
+print("Content-Type: text/html")
+print()  # Empty line required after headers
 
 # Game configuration
 SNAKES_AND_LADDERS = {
@@ -168,6 +142,7 @@ def generate_html(game_state):
     script_name = os.environ.get('SCRIPT_NAME', '/cgi-bin/snakes_game.py')
     board_html = generate_board_html(game_state)
     roll_disabled = 'disabled' if game_state['game_over'] else ''
+    
     # Build player card classes in Python for correct HTML
     p1_card_class = "player-card"
     p2_card_class = "player-card"
@@ -176,6 +151,12 @@ def generate_html(game_state):
             p1_card_class += " current"
         else:
             p2_card_class += " current"
+    
+    # Fix message class
+    message_class = "message"
+    if game_state['game_over']:
+        message_class += " game-over"
+    
     html = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -378,7 +359,7 @@ def generate_html(game_state):
     <div class="container">
         <h1>🐍 Snakes and Ladders 🪜</h1>
         
-        <div class="message {'game-over' if game_state['game_over'] else ''}">
+        <div class="{message_class}">
             {game_state['message']}
         </div>
         
@@ -441,17 +422,27 @@ def generate_html(game_state):
     return html
 
 def main():
-    """Start the HTTP server"""
-    server_address = ('', 8000)  # '' means localhost
-    httpd = HTTPServer(server_address, SnakesLaddersHandler)
-    print("Server running at http://localhost:8000/")
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\nShutting down server...")
-        httpd.server_close()
-        sys.exit(0)
+    """Main CGI application logic"""
+    # Parse form data using CGI
+    form = cgi.FieldStorage()
+    action = form.getvalue('action', '')
+    
+    # Load current game state
+    game_state = load_game_state()
+    
+    # Process the action
+    if action == 'roll':
+        game_state = roll_dice_action(game_state)
+    elif action == 'reset':
+        game_state = reset_game()
+    
+    # Save the updated game state
+    save_game_state(game_state)
+    
+    # Generate and output the HTML page
+    html = generate_html(game_state)
+    print(html)
 
+# Run the main application
 if __name__ == '__main__':
-    main()
     main()
